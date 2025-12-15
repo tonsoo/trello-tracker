@@ -1,0 +1,30 @@
+{
+  "name": "tonso/trello-tracker",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Tonso\\TrelloTracker\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Tonso\\TrelloTracker\\TrelloTrackerServiceProvider"
+      ]
+    }
+  },
+  "require": {
+    "illuminate/support": "^12.42",
+    "illuminate/routing": "^12.42",
+    "illuminate/config": "^12.42",
+    "ext-json": "*",
+    "stevenmaguire/trello-php": "^1.0",
+    "openai-php/client": "^0.18.0",
+    "laravel/framework": "^12.42"
+  },
+  "config": {
+    "allow-plugins": {
+      "php-http/discovery": true
+    }
+  }
+}
