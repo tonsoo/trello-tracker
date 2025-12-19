@@ -31,7 +31,7 @@ class TranscriptController extends Controller
 
         $record->status = 'active';
         $record->body = $merged;
-        $record->ended_at = $data['endedAt'];
+        $record->ended_at = null;
         $record->save();
 
         return response()->json([

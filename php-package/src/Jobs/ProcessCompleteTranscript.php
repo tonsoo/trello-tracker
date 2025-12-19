@@ -9,6 +9,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Tonso\TrelloTracker\Models\Transcript;
+use Tonso\TrelloTracker\UseCases\ProcessTranscript;
 
 class ProcessCompleteTranscript implements ShouldQueue
 {
@@ -16,14 +17,14 @@ class ProcessCompleteTranscript implements ShouldQueue
 
     public function __construct(public Transcript $transcript) {}
 
-    public function handle()
+    public function handle(ProcessTranscript $useCase)
     {
         try {
             Log::info("Processing finalized transcript for: " . $this->transcript->meeting_id);
 
-            $this->transcript->update(['status' => 'completed']);
+            $useCase->handle($this->transcript);
 
-//            ProcessContextBatchJob::dispatch();
+            $this->transcript->update(['status' => 'completed']);
         } catch (\Exception $e) {
             $this->transcript->update(['status' => 'active']);
             throw $e;

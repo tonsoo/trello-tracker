@@ -14,7 +14,7 @@ class MonitorIdleTranscripts extends Command
      * The name and signature of the console command.
      * {minutes?} makes the argument optional.
      */
-    protected $signature = 'trello-tracker:monitor-idle {minutes=5}';
+    protected $signature = 'trello-tracker:monitor-idle {minutes=1}';
 
     protected $description = 'Check for transcripts that have been silent for X minutes';
 
