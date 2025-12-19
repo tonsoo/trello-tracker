@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Trello Tracker",
+  "version": "1.0.0",
+  "description": "Captures Google Meet captions and sends transcript to a configurable server",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://*/"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

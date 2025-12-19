@@ -2,11 +2,13 @@
 
 namespace Tonso\TrelloTracker;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 use Stevenmaguire\Services\Trello\Client;
 use Tonso\TrelloTracker\AI\AiIntentAnalyzer;
 use Tonso\TrelloTracker\AI\Clients\OpenAILLMClient;
 use Tonso\TrelloTracker\AI\Contracts\LLMClient;
+use Tonso\TrelloTracker\Console\Commands\MonitorIdleTranscripts;
 use Tonso\TrelloTracker\Messaging\Adapters\WhatsAppAdapter;
 use Tonso\TrelloTracker\Services\Trello\TrelloOrchestrator;
 use Tonso\TrelloTracker\Services\Trello\TrelloService;
@@ -17,8 +19,25 @@ class TrelloTrackerServiceProvider extends ServiceProvider
 {
     public function register()
     {
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../database/migrations' => database_path('migrations'),
+            ], 'trello-tracker-migrations');
+
+            $this->commands([
+                MonitorIdleTranscripts::class,
+            ]);
+
+            $this->app->booted(function () {
+                $schedule = $this->app->make(Schedule::class);
+                $schedule->command('trello-tracker:monitor-idle')->everyFiveMinutes();
+            });
+        }
+
         $this->mergeConfigFrom(
-            __DIR__.'/../config/trello-tracker.php',
+            __DIR__ . '/../config/trello-tracker.php',
             'trello-tracker'
         );
 
@@ -55,10 +74,10 @@ class TrelloTrackerServiceProvider extends ServiceProvider
 
     public function boot()
     {
-        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
+        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
 
         $this->publishes([
-            __DIR__.'/../config/trello-tracker.php' => config_path('trello-tracker.php'),
+            __DIR__ . '/../config/trello-tracker.php' => config_path('trello-tracker.php'),
         ], 'trello-tracker-config');
     }
 }

@@ -95,7 +95,7 @@ final class TrelloOrchestrator
     private function scoreCard(Card $card, array $keywords): int
     {
         $haystack = strtolower(
-            $card->name().' '.($card->description() ?? '')
+            $card->name() . ' TrelloOrchestrator.php' .($card->description() ?? '')
         );
 
         $score = 0;

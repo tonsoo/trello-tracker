@@ -86,4 +86,10 @@ return [
 
     ],
 
+    'transcriptions' => [
+
+        'secret_key' => env('TRANSCRIBER_SECRET_KEY'),
+
+    ]
+
 ];
