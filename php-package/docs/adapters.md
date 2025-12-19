@@ -12,11 +12,11 @@ Adapters traduzem payloads específicos da plataforma para DTOs `IncomingMessage
 - Produz `IncomingMessage(platform: 'whatsapp', senderId, text, rawPayload)`
 
 ## Criando um novo adapter
+
 ```php
 namespace App\Messaging\Adapters;
 
-use Tonso\TrelloTracker\Messaging\Contracts\MessagingAdapter;
-use Tonso\TrelloTracker\Messaging\IncomingMessage;
+use Tonso\TrelloTracker\Messaging\Contracts\MessagingAdapter;use Tonso\TrelloTracker\Models\IncomingMessage;
 
 final class TelegramAdapter implements MessagingAdapter
 {

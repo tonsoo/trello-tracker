@@ -2,12 +2,10 @@
 
 namespace Tonso\TrelloTracker\Messaging\Contracts;
 
-use Tonso\TrelloTracker\Messaging\IncomingMessage;
-
 interface MessagingAdapter
 {
     /**
-     * @return IncomingMessage[]
+     * @return array<int, array<string, mixed>> Attribute arrays for IncomingMessage model creation
      */
     public function parse(array $payload): array;
 }

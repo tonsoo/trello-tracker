@@ -43,4 +43,9 @@ final class Card extends TrelloObject
     {
         return $this->get('labels', []);
     }
+
+    public function listName(): string
+    {
+        return $this->get('list')->name ?? 'Unknown';
+    }
 }

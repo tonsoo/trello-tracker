@@ -60,6 +60,11 @@ return [
 
     'ai' => [
 
+        /**
+         * The similarity threshold so the AI knows if and issue is related to an existing card
+         */
+        'similarity_threshold' => 0.8,
+
         'openai' => [
 
             /**
@@ -71,16 +76,6 @@ return [
              * The open api model to use
              */
             'model' => env('OPENAI_MODEL', 'gpt-4.1-mini'),
-
-            /**
-             * The similarity threshold so the AI knows if and issue is related to an existing card
-             */
-            'similarity_threshold' => 0.75,
-
-            /**
-             * The max amount of candidates to send to the AI
-             */
-            'max_similarity_candidates' => 5,
 
         ],
 

@@ -3,6 +3,8 @@
 namespace Tonso\TrelloTracker\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use Tonso\TrelloTracker\Jobs\ProcessCompleteTranscript;
 use Tonso\TrelloTracker\Models\Transcript;
 use Carbon\Carbon;
 
@@ -18,6 +20,8 @@ class MonitorIdleTranscripts extends Command
 
     public function handle()
     {
+        Log::info('Running transcript monitor');
+
         $minutes = (int) $this->argument('minutes');
 
         $this->info("Checking for transcripts silent for more than {$minutes} minutes...");
@@ -28,6 +32,7 @@ class MonitorIdleTranscripts extends Command
 
         if ($idleTranscripts->isEmpty()) {
             $this->comment("No idle transcripts found.");
+            Log::info('No trsncripts');
             return 0;
         }
 
@@ -40,6 +45,7 @@ class MonitorIdleTranscripts extends Command
         }
 
         $this->info("Monitoring complete.");
+        Log::info('Finished transcripts monitor');
         return 0;
     }
 }

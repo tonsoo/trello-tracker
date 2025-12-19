@@ -3,7 +3,6 @@
 namespace Tonso\TrelloTracker\Messaging\Adapters;
 
 use Tonso\TrelloTracker\Messaging\Contracts\MessagingAdapter;
-use Tonso\TrelloTracker\Messaging\IncomingMessage;
 
 final class WhatsAppAdapter implements MessagingAdapter
 {
@@ -20,12 +19,12 @@ final class WhatsAppAdapter implements MessagingAdapter
                         continue;
                     }
 
-                    $messages[] = new IncomingMessage(
-                        platform: 'whatsapp',
-                        senderId: $message['from'],
-                        text: $message['text']['body'],
-                        rawPayload: $message
-                    );
+                    $messages[] = [
+                        'external_id' => $message['id'] ?? null,
+                        'text' => $message['text']['body'] ?? '',
+                        'source' => 'whatsapp',
+                        'processed' => false,
+                    ];
                 }
             }
         }

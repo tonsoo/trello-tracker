@@ -9,7 +9,9 @@ use Tonso\TrelloTracker\AI\AiIntentAnalyzer;
 use Tonso\TrelloTracker\AI\Clients\OpenAILLMClient;
 use Tonso\TrelloTracker\AI\Contracts\LLMClient;
 use Tonso\TrelloTracker\Console\Commands\MonitorIdleTranscripts;
+use Tonso\TrelloTracker\Jobs\ProcessMessageBatchJob;
 use Tonso\TrelloTracker\Messaging\Adapters\WhatsAppAdapter;
+use Tonso\TrelloTracker\Models\IncomingMessage;
 use Tonso\TrelloTracker\Services\Trello\TrelloOrchestrator;
 use Tonso\TrelloTracker\Services\Trello\TrelloService;
 use Tonso\TrelloTracker\Services\WhatsappService;
@@ -32,7 +34,11 @@ class TrelloTrackerServiceProvider extends ServiceProvider
 
             $this->app->booted(function () {
                 $schedule = $this->app->make(Schedule::class);
-                $schedule->command('trello-tracker:monitor-idle')->everyFiveMinutes();
+                $schedule->command('trello-tracker:monitor-idle')->everyThirtySeconds();
+                $schedule->job(new ProcessMessageBatchJob())->everyThirtySeconds();
+                $schedule->call(function () {
+                    IncomingMessage::where('created_at', '<', now()->subDays(10))->delete();
+                })->daily();
             });
         }
 

@@ -23,7 +23,7 @@ class ProcessCompleteTranscript implements ShouldQueue
 
             $this->transcript->update(['status' => 'completed']);
 
-
+//            ProcessContextBatchJob::dispatch();
         } catch (\Exception $e) {
             $this->transcript->update(['status' => 'active']);
             throw $e;

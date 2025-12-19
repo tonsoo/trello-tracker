@@ -5,9 +5,8 @@ namespace Tonso\TrelloTracker\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use Tonso\TrelloTracker\Jobs\ProcessIncomingMessageJob;
 use Tonso\TrelloTracker\Messaging\Adapters\WhatsAppAdapter;
-use Tonso\TrelloTracker\UseCases\ProcessIncomingMessage;
+use Tonso\TrelloTracker\Models\IncomingMessage;
 
 class MessagingController extends Controller
 {
@@ -35,9 +34,7 @@ class MessagingController extends Controller
         Log::info('Received whatsapp request');
         $messages = $adapter->parse($request->all());
 
-        foreach ($messages as $message) {
-            ProcessIncomingMessageJob::dispatch($message);
-        }
+        IncomingMessage::insert($messages);
 
         return response()->json(['ok' => true]);
     }

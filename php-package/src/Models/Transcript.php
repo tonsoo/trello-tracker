@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Transcript extends Model
 {
-    protected $table = 'transcripts';
-
     protected $fillable = [
         'meeting_id',
         'body',

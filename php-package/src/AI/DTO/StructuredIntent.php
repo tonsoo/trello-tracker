@@ -11,6 +11,7 @@ final class StructuredIntent
         public readonly array $steps,
         public readonly array $tags,
         public readonly ?string $resolution,
+        public readonly array $canonical,
     ) {}
 
     public static function fromArray(array $data): self
@@ -22,6 +23,7 @@ final class StructuredIntent
             steps: $data['steps_to_reproduce'] ?? [],
             tags: $data['tags'] ?? [],
             resolution: $data['resolution'] ?? null,
+            canonical: $data['canonical'] ?? [],
         );
     }
 }

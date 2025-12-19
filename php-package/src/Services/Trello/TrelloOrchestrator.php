@@ -2,6 +2,7 @@
 
 namespace Tonso\TrelloTracker\Services\Trello;
 
+use Illuminate\Support\Str;
 use Tonso\TrelloTracker\AI\AiIntentAnalyzer;
 use Tonso\TrelloTracker\AI\DTO\StructuredIntent;
 use Tonso\TrelloTracker\Objects\Trello\Card;
@@ -13,60 +14,24 @@ final class TrelloOrchestrator
         private readonly AiIntentAnalyzer $ai,
     ) {}
 
-    public function handle(StructuredIntent $intent): void
+    private function appendBug(Card $card, StructuredIntent $intent): void
     {
-        match ($intent->type) {
-            'bug_report'     => $this->handleBug($intent),
-            'feature_request'=> $this->handleFeature($intent),
-            'bug_fixed'      => $this->handleBugFixed($intent),
-            default          => null,
-        };
-    }
-
-    private function handleBug(StructuredIntent $intent): void
-    {
-        $card = $this->findSimilarCard($intent);
-
-        if ($card) {
-            $this->appendBugContext($card, $intent);
-            return;
-        }
-
-        $this->createNewBugCard($intent);
-    }
-
-    private function appendBugContext(Card $card, StructuredIntent $intent): void
-    {
-        $current = $card->description() ?? '';
-
-        $updatedDescription = trim($current)."\n\n"
-            ."### New report\n"
-            ."- {$intent->description}";
-
-        $this->trello->updateDescription($card->id(), $updatedDescription);
-
         $this->trello->addComment(
             $card->id(),
-            "New report added:\n{$intent->description}"
+            "🐞 New bug report:\n{$intent->description}"
         );
     }
 
-    private function createNewBugCard(StructuredIntent $intent): void
+    private function appendFeatureContext(Card $card, StructuredIntent $intent): void
     {
-        $this->trello->createCard(
-            name: '🐞 '.$intent->title,
-            desc: $this->formatBugDescription($intent)
+        $this->trello->addComment(
+            $card->id(),
+            "✨ Additional context:\n{$intent->description}"
         );
     }
 
-    private function handleBugFixed(StructuredIntent $intent): void
+    private function closeBug(Card $card, StructuredIntent $intent): void
     {
-        $card = $this->findSimilarCard($intent);
-
-        if (!$card) {
-            return;
-        }
-
         $this->trello->addComment(
             $card->id(),
             "✅ Fixed:\n{$intent->resolution}"
@@ -75,104 +40,99 @@ final class TrelloOrchestrator
         $this->trello->archiveCard($card->id());
     }
 
-    private function handleFeature(StructuredIntent $intent): void
+    private function updateExistingCard(Card $card, StructuredIntent $intent): void
     {
+        match ($intent->type) {
+            'bug_report'      => $this->appendBug($card, $intent),
+            'feature_request' => $this->appendFeatureContext($card, $intent),
+            'bug_fixed'       => $this->closeBug($card, $intent),
+            default           => null,
+        };
+    }
+
+    private function createNewCard(StructuredIntent $intent): void
+    {
+        $prefix = match ($intent->type) {
+            'bug_report'      => '🐞 ',
+            'feature_request' => '✨ ',
+            default           => '📝 ',
+        };
+
+        $canonicalBlock = '';
+        if (!empty($intent->canonical)) {
+            $canonicalBlock = "\n\n<!-- canonical:" . json_encode($intent->canonical) . " -->";
+        }
+
         $this->trello->createCard(
-            name: "✨ ".$intent->title,
-            desc: $intent->description
+            name: $prefix.$intent->title,
+            desc: ($intent->description ?? '') . $canonicalBlock
         );
     }
 
-    private function extractKeywords(StructuredIntent $intent): array
+    public function handle(StructuredIntent $intent): void
     {
-        return array_values(array_unique(array_filter([
-            $intent->title,
-            ...$intent->tags,
-            ...$intent->steps,
-        ])));
+        $card = $this->findMatchingCard($intent);
+
+        if ($card) {
+            $this->updateExistingCard($card, $intent);
+            return;
+        }
+
+        $this->createNewCard($intent);
     }
 
-    private function scoreCard(Card $card, array $keywords): int
+    private function extractCanonicalFromCard(Card $card): ?array
     {
-        $haystack = strtolower(
-            $card->name() . ' TrelloOrchestrator.php' .($card->description() ?? '')
-        );
+        $desc = $card->description() ?? '';
 
-        $score = 0;
+        if (!preg_match('/<!-- canonical:(.*?) -->/s', $desc, $m)) {
+            return null;
+        }
 
-        foreach ($keywords as $keyword) {
-            $keyword = strtolower($keyword);
+        return json_decode(trim($m[1]), true);
+    }
 
-            if (strlen($keyword) < 3) {
-                continue;
-            }
+    private function canonicalEquals(
+        StructuredIntent $intent,
+        array $cardCanonical
+    ): bool {
+        return
+            ($intent->canonical['object'] ?? null) === ($cardCanonical['object'] ?? null)
+            && ($intent->canonical['action'] ?? null) === ($cardCanonical['action'] ?? null);
+    }
 
-            if (str_contains($haystack, $keyword)) {
-                $score++;
+    private function findMatchingCard(StructuredIntent $intent): ?Card
+    {
+        $cards = $this->trello->cards();
+
+        foreach ($cards as $card) {
+            $cardCanonical = $this->extractCanonicalFromCard($card);
+
+            if ($cardCanonical && !empty($intent->canonical)) {
+                if ($this->canonicalEquals($intent, $cardCanonical)) {
+                    return $card;
+                }
             }
         }
 
-        return $score;
-    }
+        $slimCards = $cards->map(fn($card) => [
+            'id' => $card->id(),
+            'title' => $card->name(),
+            'summary' => Str::limit($card->description() ?? '', 500),
+        ]);
 
-    private function getCandidateCards(array $keywords, int $limit): \Illuminate\Support\Collection
-    {
-        return $this->trello->cards()
-            ->map(fn (Card $card) => [
-                'card' => $card,
-                'score' => $this->scoreCard($card, $keywords),
-            ])
-            ->filter(fn ($item) => $item['score'] > 0)
-            ->sortByDesc('score')
-            ->take($limit)
-            ->pluck('card');
-    }
-
-    private function findSimilarCard(StructuredIntent $intent): ?Card
-    {
-        $keywords = $this->extractKeywords($intent);
-
-        $candidates = $this->getCandidateCards(
-            keywords: $keywords,
-            limit: config('trello-tracker.ai.max_similarity_candidates', 5)
-        );
-
-        $bestMatch = null;
-        $bestConfidence = 0.0;
-
-        foreach ($candidates as $card) {
-            $result = $this->ai->compareIssue(
-                newMessage: $intent->description ?? $intent->title,
-                existingCard: [
-                    'title' => $card->name(),
-                    'description' => $card->description(),
-                ]
+        foreach ($slimCards->chunk(100) as $chunk) {
+            $result = $this->ai->findMatchInBatch(
+                newIntent: "{$intent->type} | {$intent->title} | {$intent->description}",
+                candidates: $chunk->values()->toArray()
             );
 
-            if (
-                $result->match &&
-                $result->confidence > $bestConfidence
-            ) {
-                $bestMatch = $card;
-                $bestConfidence = $result->confidence;
+            if (($result['match'] ?? false) &&
+                ($result['confidence'] ?? 0) >= config('trello-tracker.ai.similarity_threshold')) {
+                return $cards->firstWhere('id', $result['card_id']);
             }
         }
 
-        return $bestConfidence >= config('trello-tracker.ai.similarity_threshold')
-            ? $bestMatch
-            : null;
-    }
-
-    private function formatBugDescription(StructuredIntent $intent): string
-    {
-        return implode("\n", array_filter([
-            "## Description",
-            $intent->description,
-            "",
-            "## Steps to reproduce",
-            collect($intent->steps)
-                ->map(fn ($s, $i) => ($i + 1).". {$s}")
-                ->join("\n"),
-        ]));
+        return null;
     }
 }

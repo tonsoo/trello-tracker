@@ -2,8 +2,8 @@
 
 namespace Tonso\TrelloTracker\AI;
 
+use Illuminate\Support\Facades\Log;
 use Tonso\TrelloTracker\AI\Contracts\LLMClient;
-use Tonso\TrelloTracker\AI\DTO\SimilarityResult;
 use Tonso\TrelloTracker\AI\DTO\StructuredIntent;
 
 final class AiIntentAnalyzer
@@ -23,83 +23,191 @@ final class AiIntentAnalyzer
 
         return StructuredIntent::fromArray($data);
     }
-
-    public function compareIssue(
-        string $newMessage,
-        array $existingCard
-    ): SimilarityResult {
+    public function analyzeBatch(string $context): array
+    {
         $json = $this->llm->analyzeIntent(
-            systemPrompt: $this->similarityPrompt($existingCard),
-            userMessage: $newMessage
+            systemPrompt: $this->batchSystemPrompt(),
+            userMessage: $context
         );
 
-        $data = json_decode($json, true);
+        $data = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
 
-        return new SimilarityResult(
-            match: (bool) ($data['match'] ?? false),
-            confidence: (float) ($data['confidence'] ?? 0),
-            reason: (string) ($data['reason'] ?? '')
+        // Ensure we return an array of objects
+        return array_map(
+            fn($item) => StructuredIntent::fromArray($item),
+            $data['tasks'] ?? []
         );
     }
 
-    private function similarityPrompt(array $existingCard): string
+    public function findMatchInBatch(string $newIntent, array $candidates): array
     {
-        return <<<PROMPT
-You are an AI that determines whether two bug reports describe the SAME underlying issue.
+        $systemPrompt = <<<PROMPT
+Você é um motor de DEDUPLICAÇÃO EXTREMAMENTE RIGOROSO.
 
-Existing card:
-Title: "{$existingCard['title']}"
-Description: "{$existingCard['description']}"
+OBJETIVO:
+Determinar se duas tarefas representam O MESMO problema técnico.
 
-New report:
-The user message will be provided separately.
+PROCESSO:
+1. Compare o type do novo problema com os cartões existentes.
+2. Compare canonical.object.
+3. Compare canonical.action.
 
-Return JSON only.
+REGRA DE MATCH:
+Match = true SOMENTE se:
+✔ Mesmo type
+✔ Mesmo canonical.object
+✔ Mesmo canonical.action
 
-JSON schema:
+Ignore completamente diferenças de texto, adjetivos ou contexto.
+
+REGRA DE SEGURANÇA:
+Na dúvida, retorne match: false.
+
+SAÍDA:
+Retorne apenas um objeto json válido.
+
+Formato:
 {
   "match": boolean,
-  "confidence": number,
-  "reason": string
+  "card_id": "string|null",
+  "confidence": 0.0-1.0,
+  "reason": "Explique a comparação canônica"
 }
-
-Guidelines:
-- Consider the same issue even if symptoms differ (e.g. color change vs blank screen)
-- Focus on underlying cause
-- If uncertain, set match=false
 PROMPT;
+
+        $userMessage = "NOVA INTENÇÃO:\n{$newIntent}\n\nLISTA DE CARTÕES EXISTENTES:\n" . json_encode($candidates);
+
+        try {
+            $json = $this->llm->analyzeIntent($systemPrompt, $userMessage);
+            return json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+        } catch (\Exception $e) {
+            Log::error("Batch match failed: " . $e->getMessage());
+            return ['match' => false];
+        }
     }
 
     private function systemPrompt(): string
     {
         return <<<PROMPT
-You are an AI that extracts structured task intents from messages.
+Você é um analisador técnico de ALTA PRECISÃO.
 
-You MUST return valid JSON only.
+OBJETIVO:
+Extrair UMA ÚNICA tarefa técnica claramente identificável a partir da mensagem do usuário.
 
-Supported intent types:
-- bug_report
-- feature_request
-- bug_fixed
-- status_update
-- unknown
+PRINCÍPIO FUNDAMENTAL:
+Cada tarefa representa UM problema técnico único.
+Nunca misture problemas diferentes em uma mesma tarefa.
 
-Rules:
-- Be concise
-- Never invent data
-- If unsure, use type "unknown"
-- Steps must be an array
-- Tags must be lowercase
+PROCESSO OBRIGATÓRIO (MENTAL):
+1. Identifique o OBJETO PRINCIPAL afetado.
+2. Identifique a FALHA ou AÇÃO ocorrida.
+3. Ignore sintomas secundários ou consequências indiretas.
 
-JSON schema:
+REGRA CRÍTICA DE IDENTIDADE:
+Você DEVE extrair uma identidade canônica do problema.
+
+A identidade canônica consiste em:
+- object: o conceito técnico principal afetado
+- action: a ação, falha ou intenção principal
+
+Essa identidade deve ser estável mesmo se o texto mudar.
+
+Exemplo:
+"Implementar alerta sutil de falta de conexão"
+"Implementar alerta de conexão perdida no app"
+
+→ object: "conexao"
+→ action: "alerta_ausencia"
+
+REGRAS DE TÍTULO:
+- Curto
+- Técnico
+- Canônico
+- Sem narrativa ou contexto de usuário
+
+❌ "Usuário não consegue bater ponto"
+✅ "Falha na leitura do cartão"
+
+IDIOMA:
+Use Português do Brasil.
+
+SAÍDA:
+Responda exclusivamente em json válido.
+Não escreva nenhum texto fora do json.
+
+Formato json esperado:
 {
-  "type": string,
-  "title": string,
-  "description": string|null,
-  "steps_to_reproduce": string[],
-  "tags": string[],
-  "resolution": string|null
+  "type": "bug_report|feature_request|bug_fixed|unknown",
+  "title": "Título técnico e canônico",
+  "description": "Descrição objetiva do problema",
+  "steps_to_reproduce": ["passo 1", "passo 2"],
+  "tags": ["mobile", "backend", "ui"],
+  "canonical": {
+    "object": "string",
+    "action": "string"
+  },
+  "resolution": null
 }
+PROMPT;
+    }
+
+    private function batchSystemPrompt(): string
+    {
+        return <<<PROMPT
+Você é um Motor de Extração de Tarefas ULTRA CONSERVADOR.
+
+REGRA SUPREMA:
+Nunca misture problemas técnicos diferentes em uma mesma tarefa.
+
+REGRAS DE ATOMICIDADE:
+1. Cada tarefa representa exatamente 1 problema técnico.
+2. Se o usuário mencionar dois problemas diferentes, gere DUAS tarefas.
+3. Nunca una problemas apenas por parecerem relacionados.
+4. Na dúvida, sempre SEPARE.
+
+REGRA CRÍTICA:
+Cada tarefa DEVE conter um campo "canonical" com:
+- object
+- action
+
+Esses valores devem ser usados para deduplicação.
+Textos diferentes podem compartilhar a mesma identidade canônica.
+
+REGRAS DE CONTEXTO:
+- Mensagens marcadas como [ALREADY SAVED] são apenas contexto.
+- Nunca gere tarefas a partir delas.
+- Mensagens [NEW] podem complementar um problema já descrito, se forem claramente o MESMO problema.
+
+FILTRAGEM DE RUÍDO (OBRIGATÓRIA):
+Ignore completamente:
+- Pedidos para criar cards
+- Reclamações sobre processo
+- Conversa meta sobre Trello ou organização
+
+SAÍDA:
+Responda exclusivamente em json válido.
+Não escreva texto fora do json.
+
+Formato json esperado:
+{
+  "tasks": [
+    {
+      "type": "bug_report|feature_request|bug_fixed|unknown",
+      "title": "Título técnico e canônico",
+      "description": "Resumo técnico completo",
+      "steps_to_reproduce": ["passo 1"],
+      "tags": ["mobile", "ui"],
+      "canonical": {
+        "object": "string",
+        "action": "string"
+      },
+      "resolution": "Apenas se bug_fixed"
+    }
+  ]
+}
+
+Se nenhum problema técnico REAL for encontrado, retorne:
+{"tasks": []}
 PROMPT;
     }
 }
